@@ -19,6 +19,7 @@ def SP(mfmessage, current_index):
     else:
         return False
 
+
 # <digit> ::= any one of the ten digits 0 through 9
 def digit(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
@@ -64,6 +65,7 @@ def special(mfmessage, current_index):
 
     # returns True is there is no match, False if there is one
     return match is not None
+
 
 # <char> ::= any one of the printable ASCII characters, but not any of <special> or <SP>
 def char(mfmessage, current_index):
@@ -133,13 +135,18 @@ def nullspace(mfmessage, current_index):
 # returns error
 def CRLF(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
-        return True, current_index
-    
-    # if it is valid, it is NOT a CLRF
-    else:
         print("ERROR -- CRLF")
         return False, current_index
-
+    
+    # if it is valid, it is NOT a CLRF
+    if mfmessage[current_index] == '\\':
+        current_index += 1
+        if valid_index(mfmessage,current_index) != True:
+            return False, current_index
+        if mfmessage[current_index] == "n":
+            return True, current_index
+    
+    return False, current_index
 
 # <let-dig> ::= <letter> | <digit>
 def let_dig(mfmessage, current_index):
@@ -314,8 +321,7 @@ def mailbox(mfmessage, current_index):
 
     # if local_part is not followed by "@", it is NOT a mailbox
     if mfmessage[mail_cur] != "@":
-        print("ERROR -- mailbox")
-        # return to parser
+        print("ERROR -- mailbox")        # return to parser
         return False, mail_cur
 
     # increase index
@@ -401,7 +407,7 @@ def reverse_path(mfmessage, current_index):
     # if it is not a path, it is NOT a reverse_path 
     else:
         return False, tester[1]
-
+    
 
 # check if valid index
 def valid_index(mfmessage, current_index):
@@ -491,7 +497,7 @@ def mail_from_cmd(mfmessage, current_index):
         print("ERROR -- mail-from-cmd")
         return False
 
-# check for nullspace
+    # check for nullspace
     current_index += 1
     if valid_index(mfmessage,current_index) != True:
         print("ERROR -- mail-from-cmd")
@@ -515,14 +521,20 @@ def mail_from_cmd(mfmessage, current_index):
     # if last elt is ">", it is a mail_from_cmd
     if mfmessage[current_index] != ">":
         return False
+    current_index += 1
     test_nulb = nullspace(mfmessage, current_index)
 
-# check for CRLF
-    current_index = test_nulb[1] + 1
-    if valid_index(mfmessage, current_index) == True:
+    # check for CRLF
+    current_index = test_nulb[1]
+    if valid_index(mfmessage, current_index) != True:
         print("ERROR -- CRLF")
         return False
-
+    
+    # should throw error in CRLF if false
+    if CRLF(mfmessage, current_index)[0] == False:
+        print("ERROR -- CRLF")
+        return False
+        
     # if passes all these tests, it is a valid mail_from_cmd
     return True
 
