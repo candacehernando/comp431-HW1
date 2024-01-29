@@ -5,6 +5,7 @@
 
 
 import re
+import sys
 
 
 # <SP> ::= the space or tab character
@@ -18,7 +19,6 @@ def SP(mfmessage, current_index):
     # if it is not a space or tab character, it is NOT a SP
     else:
         return False
-
 
 # <digit> ::= any one of the ten digits 0 through 9
 def digit(mfmessage, current_index):
@@ -65,7 +65,6 @@ def special(mfmessage, current_index):
 
     # returns True is there is no match, False if there is one
     return match is not None
-
 
 # <char> ::= any one of the printable ASCII characters, but not any of <special> or <SP>
 def char(mfmessage, current_index):
@@ -135,18 +134,13 @@ def nullspace(mfmessage, current_index):
 # returns error
 def CRLF(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
-        print("ERROR -- CRLF")
-        return False, current_index
+        return True, current_index
     
     # if it is valid, it is NOT a CLRF
-    if mfmessage[current_index] == '\\':
-        current_index += 1
-        if valid_index(mfmessage,current_index) != True:
-            return False, current_index
-        if mfmessage[current_index] == "n":
-            return True, current_index
-    
-    return False, current_index
+    else:
+        print("ERROR -- CRLF")
+        return False, current_index
+
 
 # <let-dig> ::= <letter> | <digit>
 def let_dig(mfmessage, current_index):
@@ -257,6 +251,7 @@ def string(mfmessage, current_index):
 
 # <domain> ::= <element> | <element> "." <domain>
 def domain(mfmessage, current_index):
+    spaced = False
     # set temp var to hold current_index
     dom_cur = current_index
     # must begin with an element
@@ -279,10 +274,21 @@ def domain(mfmessage, current_index):
                 # not followed by an element, it is NOT a domain
                 else:
                     return False, dom_cur
-        # if begins with an element, it is a domain       
-        return True, dom_cur
-
-    # if it doesnt begin with an element, it is NOT a domain
+        # if begins with an element, is followed by ONLY spaces before ">", its a valid domain (not path)   
+        if SP(mfmessage, dom_cur) == True:
+            spaced = True
+            while SP(mfmessage, dom_cur) == True:
+                dom_cur += 1
+                # if valid domain followed by only spaces (with no ">"), it is a domain (not a path)
+                if valid_index(mfmessage,dom_cur) != True:
+                    return True, dom_cur
+        # if element IMMEDIATELY followed by ">", it is a valid domain
+        if mfmessage[dom_cur] != ">":
+            return False, dom_cur
+        # if valid domain + spaces + ">", it is a valid domain, not path, return the prev index so this works
+        else:
+            return True, dom_cur-1
+    # if it doesnt begin with an element, or is not IMMEDIATLEY followed by ">" it is NOT a domain
     else:
         return False, tester[0]
 
@@ -321,7 +327,8 @@ def mailbox(mfmessage, current_index):
 
     # if local_part is not followed by "@", it is NOT a mailbox
     if mfmessage[mail_cur] != "@":
-        print("ERROR -- mailbox")        # return to parser
+        print("ERROR -- mailbox")
+        # return to parser
         return False, mail_cur
 
     # increase index
@@ -407,7 +414,7 @@ def reverse_path(mfmessage, current_index):
     # if it is not a path, it is NOT a reverse_path 
     else:
         return False, tester[1]
-    
+
 
 # check if valid index
 def valid_index(mfmessage, current_index):
@@ -459,6 +466,10 @@ def mail_from_cmd(mfmessage, current_index):
     test_white = whitespace(mfmessage, current_index)
     if  test_white[0] != True:
         return False
+    if test_white[0] == True:
+        if mfmessage[test_white[1]] != "F":
+            print("ERROR -- whitespace")
+            return False
 
     # check for FROM:
     current_index = test_white[1]
@@ -497,17 +508,36 @@ def mail_from_cmd(mfmessage, current_index):
         print("ERROR -- mail-from-cmd")
         return False
 
-    # check for nullspace
+# check for nullspace
     current_index += 1
     if valid_index(mfmessage,current_index) != True:
         print("ERROR -- mail-from-cmd")
         return False, current_index
     test_nul = nullspace(mfmessage, current_index)
+    current_index = test_nul[1]
     if  test_nul[0] != True:
         return False
-
+    # if valid nullspace
+    if test_nul[0] == True:
+        # if current elt is not "<", determine what error to throw
+        if mfmessage[current_index] != "<":
+            tester_ind = current_index
+            check_for_path = False
+            # check to see if "<" is present, if not, path error
+            while valid_index(mfmessage, tester_ind) == True:
+                # if find "<", whitespace error
+                if mfmessage[tester_ind] == "<":
+                    check_for_path = True
+                tester_ind += 1
+                continue
+            if check_for_path == False:
+                print("ERROR -- path")
+                return False
+            if check_for_path == True:
+                print("ERROR -- whitespace")
+                return False
+            
     # check for reverse_path
-    current_index = test_nul[1]
     # if index invalid, reverse_path -> path throws error
     test_rev = reverse_path(mfmessage, current_index)
     if  test_rev[0] != True:
@@ -521,20 +551,14 @@ def mail_from_cmd(mfmessage, current_index):
     # if last elt is ">", it is a mail_from_cmd
     if mfmessage[current_index] != ">":
         return False
-    current_index += 1
     test_nulb = nullspace(mfmessage, current_index)
 
-    # check for CRLF
-    current_index = test_nulb[1]
-    if valid_index(mfmessage, current_index) != True:
+# check for CRLF
+    current_index = test_nulb[1] + 1
+    if valid_index(mfmessage, current_index) == True:
         print("ERROR -- CRLF")
         return False
-    
-    # should throw error in CRLF if false
-    if CRLF(mfmessage, current_index)[0] == False:
-        print("ERROR -- CRLF")
-        return False
-        
+
     # if passes all these tests, it is a valid mail_from_cmd
     return True
 
@@ -552,7 +576,8 @@ def main():
             
             current_index = 0
             mfmessage = line
-            print(line)
+            sys.stdout.write(line)
+            sys.stdout.write("\n")
 
             # check if it is a valid address
             if mail_from_cmd(mfmessage, current_index) == True:
