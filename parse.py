@@ -11,7 +11,8 @@ import sys
 # <SP> ::= the space or tab character
 def SP(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
-            return False, current_index
+            return False
+    
     # if elt is a space or the tab character, it is a SP
     if mfmessage[current_index] == " " or mfmessage[current_index] == "\t":
         return True
@@ -24,6 +25,7 @@ def SP(mfmessage, current_index):
 def digit(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
         return False, current_index
+    
     # trying turning elt into an integer
     try:
         int_try = int(mfmessage[current_index])
@@ -39,13 +41,12 @@ def digit(mfmessage, current_index):
 def letter(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
         return False, current_index
+    
     # get current elt
     tester = mfmessage[current_index]
-
     # if it is an example of an alphabetical letter, it is a letter
     if tester.isalpha() == True:
         return True
-    
     # if it is not, it is NOT a letter
     else:
         return False
@@ -55,11 +56,11 @@ def letter(mfmessage, current_index):
 def special(mfmessage, current_index):
     if valid_index(mfmessage,current_index) != True:
         return False, current_index
+    
     # get current elt
     tester = mfmessage[current_index]
     # returns True if elt is one of the following characters
     pattern = re.compile(r'[<>()\[\]\\.,;:@"]')
-
     # use the search function to check for a match
     match = pattern.search(tester)
 
@@ -90,57 +91,103 @@ def char(mfmessage, current_index):
 
 # <whitespace> ::= <SP> | <SP> <whitespace>
 # returns error, updates index
-def whitespace(mfmessage, current_index):
+def whitespace(mfmessage, current_index, must_reach):
     if valid_index(mfmessage,current_index) != True:
         print("ERROR -- whitespace")
         return False, current_index
-    # if elt is a SP
+    
+    # if there is no whitespace
+    if mfmessage[current_index] == must_reach:
+        print("ERROR -- whitespace")
+        return False, current_index
+    
+    # if current index is a space
     if SP(mfmessage, current_index) == True:
-        # while the elt is a SP, keep going
+        # continue until not on a space
         while SP(mfmessage, current_index) == True:
             current_index += 1
             if valid_index(mfmessage,current_index) != True:
-                break
+                return False, current_index 
             continue
-        # if elt starts with SP, it is a whitespace
-        return True, current_index
+        # if nullspace before CRLF, return first nonspace to check if it is CRLF
+        if must_reach == "-1":
+            is_present = re.search(r'\\n', mfmessage)
+            # if there is a newline character
+            if is_present is not None:
+                # if newline present and we are there, whitespace true
+                if current_index == is_present.span()[0]:
+                    return True, current_index
+        # if not before CRLF, if current elt is not what elt after sp should be
+        if mfmessage[current_index] != must_reach:
+            print("ERROR -- whitespace")
+            return False, current_index
+        # if elt after sp is what it should be
+        if mfmessage[current_index] == must_reach:
+            return True, current_index
     
-    # if elt doesnt begin with a SP, it is NOT a whitespace
-    else:
-        print("ERROR -- whitespace")
-        # return to parser
-        return False, current_index
+    # if elt before CRLF
+    if must_reach == -1:
+        is_present = re.search("\n", mfmessage)
+        # if there is a newline character
+        if is_present is not None:
+            # if current elt is the beginning of the newline character, go test if newline is last character
+            if current_index == is_present.span()[0]:
+                return True, current_index
+        
+    print("ERROR -- whitespace")
+    return False, current_index        
         
         
 # <nullspace> ::= <null> | <whitespace>
-def nullspace(mfmessage, current_index):
-    # if elt (and beyond) is a whitespace, it is a nullspace
-    if SP(mfmessage, current_index) == True:
-        # while the elt is a SP, keep going
-        while SP(mfmessage, current_index) == True:
-            current_index += 1
-            if valid_index(mfmessage,current_index) != True:
-                break
-            continue
-        # if elt starts with SP, it is a whitespace
+# either a space or nothing
+def nullspace(mfmessage, current_index, must_reach):
+    # if it is not a valid index, can not check
+    if valid_index(mfmessage,current_index) != True:
         return True, current_index
+    
+    # if there is no whitespace and at must_reach, it is a nullspace
+    if mfmessage[current_index] == must_reach:
+        return True, current_index
+    
+    # if it is not a nullspace, will throw error there
+    spacing = whitespace(mfmessage, current_index, must_reach)
+    if spacing[0] == True:
+        return True, spacing[1]
 
-    # if not a space, then there is nothing there and elt is a nullspace
-    return True, current_index
-    # does not return false because could be nothing
+    # if not null and not whitespace, not a nullspace
+    return False, current_index
 
 
 # <CRLF> ::= the newline character
 # returns error
 def CRLF(mfmessage, current_index):
+    # if ">" is last char in message, it does NOT contain the newline character
     if valid_index(mfmessage,current_index) != True:
-        return True, current_index
-    
-    # if it is valid, it is NOT a CLRF
-    else:
         print("ERROR -- CRLF")
         return False, current_index
-
+    
+    # search for newline character at the end of string
+    is_present = re.search(r'\\n\Z', mfmessage)
+    # if there is no newline character, NO CRLF
+    if is_present is None:
+        print("ERROR -- CRLF")
+        return False, current_index
+    
+    # access starting index of newline character
+    start_of_NL = is_present.span()[0]
+    end_of_NL = is_present.span()[1]
+    # if the start of newline isnt at the current index
+    if current_index != start_of_NL:
+        print("ERROR -- CRLF s")
+        return False, current_index
+    # if the newline character isnt the last thing in the string
+    if end_of_NL != len(mfmessage):
+        print("ERROR -- CRLF e")
+        return False, current_index
+    
+    # if it meets all these requirements
+    return True, current_index
+   
 
 # <let-dig> ::= <letter> | <digit>
 def let_dig(mfmessage, current_index):
@@ -150,10 +197,10 @@ def let_dig(mfmessage, current_index):
     if letter(mfmessage, current_index) == False:
         # if the elt is also not a digit, it is NOT a let_dig
         if digit(mfmessage, current_index) == False:
-            return False
+            return False, current_index
 
     # if both arent False, it is a let_dig
-    return True
+    return True, current_index
 
 
 # <let-dig-str> ::= <let-dig> | <let-dig> <let-dig-str>
@@ -251,7 +298,6 @@ def string(mfmessage, current_index):
 
 # <domain> ::= <element> | <element> "." <domain>
 def domain(mfmessage, current_index):
-    spaced = False
     # set temp var to hold current_index
     dom_cur = current_index
     # must begin with an element
@@ -276,7 +322,6 @@ def domain(mfmessage, current_index):
                     return False, dom_cur
         # if begins with an element, is followed by ONLY spaces before ">", its a valid domain (not path)   
         if SP(mfmessage, dom_cur) == True:
-            spaced = True
             while SP(mfmessage, dom_cur) == True:
                 dom_cur += 1
                 # if valid domain followed by only spaces (with no ">"), it is a domain (not a path)
@@ -463,13 +508,9 @@ def mail_from_cmd(mfmessage, current_index):
     # check for whitespace
     current_index += 1
     # whitespace will return error if index isnt valid
-    test_white = whitespace(mfmessage, current_index)
+    test_white = whitespace(mfmessage, current_index, "F")
     if  test_white[0] != True:
         return False
-    if test_white[0] == True:
-        if mfmessage[test_white[1]] != "F":
-            print("ERROR -- whitespace")
-            return False
 
     # check for FROM:
     current_index = test_white[1]
@@ -511,32 +552,13 @@ def mail_from_cmd(mfmessage, current_index):
 # check for nullspace
     current_index += 1
     if valid_index(mfmessage,current_index) != True:
-        print("ERROR -- mail-from-cmd")
+        print("ERROR -- path")
         return False, current_index
-    test_nul = nullspace(mfmessage, current_index)
+    test_nul = nullspace(mfmessage, current_index, "<")
     current_index = test_nul[1]
     if  test_nul[0] != True:
         return False
-    # if valid nullspace
-    if test_nul[0] == True:
-        # if current elt is not "<", determine what error to throw
-        if mfmessage[current_index] != "<":
-            tester_ind = current_index
-            check_for_path = False
-            # check to see if "<" is present, if not, path error
-            while valid_index(mfmessage, tester_ind) == True:
-                # if find "<", whitespace error
-                if mfmessage[tester_ind] == "<":
-                    check_for_path = True
-                tester_ind += 1
-                continue
-            if check_for_path == False:
-                print("ERROR -- path")
-                return False
-            if check_for_path == True:
-                print("ERROR -- whitespace")
-                return False
-            
+    
     # check for reverse_path
     # if index invalid, reverse_path -> path throws error
     test_rev = reverse_path(mfmessage, current_index)
@@ -545,18 +567,17 @@ def mail_from_cmd(mfmessage, current_index):
 
     # check for nullspace
     current_index = test_rev[1]
-    if valid_index(mfmessage,current_index) != True:
-        print("ERROR -- mail-from-cmd")
-        return False, current_index
-    # if last elt is ">", it is a mail_from_cmd
+    # if last elt is ">", double checking after reverse_path
     if mfmessage[current_index] != ">":
         return False
-    test_nulb = nullspace(mfmessage, current_index)
+    test_nulb = nullspace(mfmessage, current_index + 1, "-1")
+    if test_nulb[0] != True:
+        return False
 
 # check for CRLF
-    current_index = test_nulb[1] + 1
-    if valid_index(mfmessage, current_index) == True:
-        print("ERROR -- CRLF")
+    current_index = test_nulb[1]
+    test_crlf = CRLF(mfmessage, current_index)
+    if test_crlf[0] != True:
         return False
 
     # if passes all these tests, it is a valid mail_from_cmd
